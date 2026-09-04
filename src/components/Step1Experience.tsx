@@ -80,21 +80,13 @@ export const Step1Experience: React.FC<Step1ExperienceProps> = ({
                   <Icon className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3
-                      className={`text-base font-semibold ${
-                        isSelected ? 'text-red-950' : 'text-slate-900'
-                      }`}
-                    >
-                      {opt.type}
-                    </h3>
-                    {opt.type === 'New Vehicle Purchase' && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-100/75 border border-red-200 px-2 py-0.5 rounded-full">
-                        <Motorbike className="w-3.5 h-3.5" />
-                        2-Wheeler / Car
-                      </span>
-                    )}
-                  </div>
+                  <h3
+                    className={`text-base font-semibold ${
+                      isSelected ? 'text-red-950' : 'text-slate-900'
+                    }`}
+                  >
+                    {opt.type}
+                  </h3>
                   <p className="text-xs text-slate-500 mt-0.5 font-normal">
                     {opt.subtitle}
                   </p>
