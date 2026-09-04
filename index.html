@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>B.U. Bhandari Honda – Camp Showroom Review Assistant</title>
+    <meta name="description" content="Fast customer review assistant specifically for B.U. Bhandari Honda Camp Showroom with instant review drafting, Google Sheet synchronization, and reporting." />
+    <meta property="og:title" content="B.U. Bhandari Honda – Camp Showroom Review Assistant" />
+    <meta property="og:description" content="Fast customer review assistant specifically for B.U. Bhandari Honda Camp Showroom with instant review drafting, Google Sheet synchronization, and reporting." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      (function () {
+        try {
+          var nativeFetch = typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : null;
+          var activeFetch = nativeFetch;
+          var desc = {
+            get: function () {
+              return activeFetch;
+            },
+            set: function (newFetch) {
+              activeFetch = newFetch;
+            },
+            configurable: true,
+            enumerable: true,
+          };
+          try {
+            Object.defineProperty(window, 'fetch', desc);
+          } catch (e1) {
+            try {
+              if (typeof Window !== 'undefined' && Window.prototype) {
+                Object.defineProperty(Window.prototype, 'fetch', desc);
+              }
+            } catch (e2) {}
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
