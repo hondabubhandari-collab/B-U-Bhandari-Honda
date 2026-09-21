@@ -1,6 +1,6 @@
 {
   "name": "B.U. Bhandari Honda – Camp Showroom Review Assistant",
-  "description": "Fast customer review assistant specifically for B.U. Bhandari Honda Camp Showroom with instant review drafting, Google Sheet synchronization, and reporting.",
+  "description": "Fast customer review assistant specifically for B.U. Bhandari Honda Camp Showroom with instant review drafting and Google Sheet synchronization.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
