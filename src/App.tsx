@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { StepIndicator } from './components/StepIndicator';
 import { Step1Experience } from './components/Step1Experience';
@@ -6,8 +6,12 @@ import { Step2Rating } from './components/Step2Rating';
 import { Step3ReviewDetails } from './components/Step3ReviewDetails';
 import { Step4ReviewResult } from './components/Step4ReviewResult';
 import { ReportsModal } from './components/ReportsModal';
+import { AdminLogin } from './components/AdminLogin';
+import { AdminReviewAnalytics } from './components/AdminReviewAnalytics';
 import { ExperienceType, RatingType, ReviewFormData } from './types';
 import { generateLocalReview } from './utils/localReviewGenerator';
+import { addAiGeneratedReview, isAdminAuthenticated, logoutAdmin } from './utils/adminReviewStore';
+import { Lock } from 'lucide-react';
 
 export default function App() {
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -29,6 +33,77 @@ export default function App() {
   const [sheetSyncMessage, setSheetSyncMessage] = useState<string>('');
   const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
 
+  // Private Admin Route & Authentication
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      return search.includes('admin') || hash.includes('admin');
+    }
+    return false;
+  });
+
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    return isAdminAuthenticated();
+  });
+
+  useEffect(() => {
+    const handleUrlState = () => {
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      const hasAdmin = search.includes('admin') || hash.includes('admin');
+      setIsAdminRoute(hasAdmin);
+      if (hasAdmin) {
+        setIsAdminLoggedIn(isAdminAuthenticated());
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Secret Admin Hotkey: Ctrl+Shift+A or Alt+A opens Admin Portal
+      if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.altKey && e.key.toLowerCase() === 'a')) {
+        e.preventDefault();
+        setIsAdminRoute(true);
+        setIsAdminLoggedIn(isAdminAuthenticated());
+        window.history.pushState({}, '', '?admin=1');
+      }
+    };
+
+    window.addEventListener('popstate', handleUrlState);
+    window.addEventListener('hashchange', handleUrlState);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('popstate', handleUrlState);
+      window.removeEventListener('hashchange', handleUrlState);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const handleExitAdmin = () => {
+    setIsAdminRoute(false);
+    if (typeof window !== 'undefined' && window.history.pushState) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('admin');
+      url.hash = '';
+      const newQuery = url.searchParams.toString() ? `?${url.searchParams.toString()}` : '';
+      window.history.pushState({}, '', url.pathname + newQuery);
+    }
+  };
+
+  const handleAdminLogout = () => {
+    logoutAdmin();
+    setIsAdminLoggedIn(false);
+    handleExitAdmin();
+  };
+
+  const handleOpenAdmin = () => {
+    setIsAdminRoute(true);
+    setIsAdminLoggedIn(isAdminAuthenticated());
+    if (typeof window !== 'undefined' && window.history.pushState) {
+      window.history.pushState({}, '', '?admin=1');
+    }
+  };
+
   const stepLabels = [
     'Experience Type',
     'Rating',
@@ -49,6 +124,14 @@ export default function App() {
     setReviewHistory((prev) => [...prev, generated]);
     setReviewText(generated);
     setCurrentStep(4);
+
+    // Automatically track in private Admin Review History as AI App Generated with Pending status
+    addAiGeneratedReview(generated, {
+      experienceType: formData.experienceType || undefined,
+      rating: formData.rating || undefined,
+      employeeName: formData.employeeName || undefined,
+      teamName: formData.teamName || undefined,
+    });
 
     // Asynchronously log review activity to backend / Google Sheet as a new row (Columns A through I)
     setSheetSyncStatus('pending');
@@ -141,6 +224,14 @@ export default function App() {
     setReviewHistory((prev) => [...prev, newVariation]);
     setReviewText(newVariation);
 
+    // Track variation in private Admin Review History
+    addAiGeneratedReview(newVariation, {
+      experienceType: formData.experienceType || undefined,
+      rating: formData.rating || undefined,
+      employeeName: formData.employeeName || undefined,
+      teamName: formData.teamName || undefined,
+    });
+
     if (currentLogEntryId) {
       fetch('/api/update-log-ai-status', {
         method: 'POST',
@@ -164,6 +255,15 @@ export default function App() {
   };
 
   const handleLogAiStatus = (status: 'Success' | 'Timeout / Fallback' | 'Failed', improvedReview?: string) => {
+    if (improvedReview) {
+      addAiGeneratedReview(improvedReview, {
+        experienceType: formData.experienceType || undefined,
+        rating: formData.rating || undefined,
+        employeeName: formData.employeeName || undefined,
+        teamName: formData.teamName || undefined,
+      });
+    }
+
     if (currentLogEntryId) {
       fetch('/api/update-log-ai-status', {
         method: 'POST',
@@ -216,6 +316,26 @@ export default function App() {
     setCurrentStep(1);
   };
 
+  // If Admin URL / view was requested, enforce protection
+  if (isAdminRoute) {
+    if (isAdminLoggedIn) {
+      return (
+        <AdminReviewAnalytics
+          onBackToApp={handleExitAdmin}
+          onLogout={handleAdminLogout}
+        />
+      );
+    } else {
+      return (
+        <AdminLogin
+          onSuccess={() => setIsAdminLoggedIn(true)}
+          onRedirectToPublic={handleExitAdmin}
+        />
+      );
+    }
+  }
+
+  // Normal Public Customer View (Admin features completely hidden from public customers)
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans antialiased text-slate-900 selection:bg-red-100 selection:text-red-900">
       <div>
@@ -272,6 +392,12 @@ export default function App() {
               onUpdateReview={(text) => {
                 setReviewText(text);
                 setReviewHistory((prev) => [...prev, text]);
+                addAiGeneratedReview(text, {
+                  experienceType: formData.experienceType || undefined,
+                  rating: formData.rating || undefined,
+                  employeeName: formData.employeeName || undefined,
+                  teamName: formData.teamName || undefined,
+                });
               }}
               onRegenerateVariation={handleRegenerateVariation}
               onEdit={() => setCurrentStep(3)}
@@ -283,7 +409,7 @@ export default function App() {
         </main>
       </div>
 
-      {/* Footer strictly adhering to branding guidelines */}
+      {/* Footer strictly adhering to branding guidelines (No prominent Admin button on homepage) */}
       <footer className="w-full bg-white border-t border-slate-200 py-6 px-4 text-center text-xs text-slate-500">
         <div className="max-w-xl mx-auto space-y-2">
           <div className="flex items-center justify-center gap-2 font-semibold text-slate-700">
@@ -294,12 +420,22 @@ export default function App() {
           <p className="text-slate-400">
             Authorized Honda Cars & Honda 2-Wheelers • Pune
           </p>
-          <div className="pt-2">
+          <div className="pt-2 flex items-center justify-center gap-3">
             <button
               onClick={() => setIsReportsModalOpen(true)}
               className="text-slate-400 hover:text-slate-700 underline text-[11px] cursor-pointer"
             >
               Dealer Reporting & Sheets Integration
+            </button>
+            <span className="text-slate-300">•</span>
+            {/* Subtle, non-prominent admin portal entry */}
+            <button
+              onClick={handleOpenAdmin}
+              className="text-slate-300 hover:text-slate-500 text-[10px] cursor-pointer flex items-center gap-1 transition-colors"
+              title="Dealer Administration Portal"
+            >
+              <Lock className="w-2.5 h-2.5" />
+              <span>Admin Access</span>
             </button>
           </div>
         </div>

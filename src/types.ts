@@ -123,3 +123,48 @@ export interface TeamSummary {
   vehicleService: number;
   vehicleDelivery: number;
 }
+
+// ==========================================
+// PRIVATE ADMIN REVIEW ANALYTICS TYPES
+// ==========================================
+
+export type ReviewSource = 'AI App Generated' | 'Manual / Other';
+export type ReviewStatus = 'Posted' | 'Spam / Removed' | 'Pending';
+
+export interface TrackedReview {
+  id: string;
+  reviewText: string;
+  source: ReviewSource;
+  status: ReviewStatus;
+  generatedDate: string; // formatted date string (e.g. YYYY-MM-DD HH:mm)
+  statusUpdatedDate: string; // formatted date string
+  notes?: string;
+  experienceType?: string;
+  rating?: string;
+  employeeName?: string;
+  teamName?: string;
+}
+
+export interface ReviewAnalyticsStats {
+  totalReviewsGenerated: number;
+  totalAiReviews: number;
+  totalManualReviews: number;
+  totalTrackedReviews: number;
+  totalMarkedAsPosted: number;
+  totalMarkedAsSpamRemoved: number;
+  totalPending: number;
+  spamRemovedPercentage: number;
+
+  aiBreakdown: {
+    generated: number;
+    posted: number;
+    spamRemoved: number;
+    pending: number;
+  };
+  manualBreakdown: {
+    tracked: number;
+    posted: number;
+    spamRemoved: number;
+    pending: number;
+  };
+}
