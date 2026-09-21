@@ -12,8 +12,11 @@ import {
   calculateReviewAnalytics,
   logoutAdmin,
   formatDateTime,
+  AUTHORIZED_ADMIN_EMAIL,
+  getAuthenticatedAdminEmail,
 } from '../utils/adminReviewStore';
 import { AddManualReviewModal } from './AddManualReviewModal';
+import { ReportsModal } from './ReportsModal';
 import {
   BarChart3,
   Bot,
@@ -35,6 +38,7 @@ import {
   Info,
   Calendar,
   Layers,
+  Mail,
 } from 'lucide-react';
 
 interface AdminReviewAnalyticsProps {
@@ -52,6 +56,7 @@ export const AdminReviewAnalytics: React.FC<AdminReviewAnalyticsProps> = ({
   const [activeFilter, setActiveFilter] = useState<FilterOption>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddManualOpen, setIsAddManualOpen] = useState(false);
+  const [isReportsOpen, setIsReportsOpen] = useState(false);
   const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
 
   // Load reviews on mount
@@ -145,16 +150,25 @@ export const AdminReviewAnalytics: React.FC<AdminReviewAnalyticsProps> = ({
                 <h1 className="text-base font-bold tracking-tight">Review Analytics</h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" />
-                  <span>Admin Protected</span>
+                  <span>Authorized: {AUTHORIZED_ADMIN_EMAIL}</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                B.U. Bhandari Honda • Quality & Tracking Dashboard
+                B.U. Bhandari Honda • Quality, Reports & Tracking Dashboard
               </p>
             </div>
           </div>
 
           <div className="flex items-center flex-wrap gap-2">
+            <button
+              onClick={() => setIsReportsOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Dealer Reporting, 4-Hour Shift Reports & Google Sheets Sync"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Reports & Sheet</span>
+            </button>
+
             <button
               onClick={() => setIsAddManualOpen(true)}
               className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
@@ -706,6 +720,12 @@ export const AdminReviewAnalytics: React.FC<AdminReviewAnalyticsProps> = ({
         isOpen={isAddManualOpen}
         onClose={() => setIsAddManualOpen(false)}
         onReviewAdded={refreshReviews}
+      />
+
+      {/* Reports & Google Sheets Modal (Admin Only) */}
+      <ReportsModal
+        isOpen={isReportsOpen}
+        onClose={() => setIsReportsOpen(false)}
       />
     </div>
   );

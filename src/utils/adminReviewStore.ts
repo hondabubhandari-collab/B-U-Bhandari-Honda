@@ -286,35 +286,53 @@ export function calculateReviewAnalytics(reviews: TrackedReview[]): ReviewAnalyt
 }
 
 // ==========================================
-// ADMIN AUTHENTICATION
+// ADMIN AUTHENTICATION (EXACT EMAIL ACCESS CONTROL)
 // ==========================================
 
-export function isAdminAuthenticated(): boolean {
+export const AUTHORIZED_ADMIN_EMAIL = 'hondabubhandari@gmail.com';
+
+export function getAuthenticatedAdminEmail(): string | null {
   try {
-    const sessionToken = sessionStorage.getItem(AUTH_KEY);
-    const localToken = localStorage.getItem(AUTH_KEY);
-    return sessionToken === 'bhandari_authenticated' || localToken === 'bhandari_authenticated';
+    const raw = sessionStorage.getItem(AUTH_KEY) || localStorage.getItem(AUTH_KEY);
+    if (!raw) return null;
+    if (raw.startsWith('{')) {
+      const parsed = JSON.parse(raw);
+      if (parsed.authenticated && parsed.email?.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        return parsed.email;
+      }
+    }
+    // Legacy token check
+    if (raw === 'bhandari_authenticated') {
+      return AUTHORIZED_ADMIN_EMAIL;
+    }
   } catch {
-    return false;
+    return null;
   }
+  return null;
+}
+
+export function isAdminAuthenticated(): boolean {
+  return getAuthenticatedAdminEmail() === AUTHORIZED_ADMIN_EMAIL;
 }
 
 export function loginAdmin(
-  passwordInput: string,
-  usernameInput = 'admin'
+  emailInput: string,
+  passwordInput: string
 ): { success: boolean; message?: string } {
+  const cleanEmail = (emailInput || '').trim().toLowerCase();
   const cleanPass = (passwordInput || '').trim();
-  const cleanUser = (usernameInput || '').trim().toLowerCase();
 
-  // Valid usernames: admin, manager, or bhandari dealership email
-  const validUsers = ['admin', 'manager', 'hondabubhandari@gmail.com', 'bhandari'];
-  if (cleanUser && !validUsers.includes(cleanUser)) {
-    return { success: false, message: 'Invalid administrative username.' };
+  // Strict email verification: ONLY hondabubhandari@gmail.com is authorized
+  if (cleanEmail !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+    return {
+      success: false,
+      message: `Access Denied: "${emailInput || 'Empty'}" is not authorized. Only ${AUTHORIZED_ADMIN_EMAIL} is granted administrative access. All other email addresses are treated as public users.`,
+    };
   }
 
   // Accepted passwords:
   // 1. Any custom password configured in localStorage
-  // 2. Default dealership administrative keys
+  // 2. Dealership administrative keys
   const customPass = localStorage.getItem(CUSTOM_PASS_KEY);
   const acceptedPasswords = [
     'admin123',
@@ -330,15 +348,20 @@ export function loginAdmin(
 
   if (acceptedPasswords.includes(cleanPass)) {
     try {
-      sessionStorage.setItem(AUTH_KEY, 'bhandari_authenticated');
-      localStorage.setItem(AUTH_KEY, 'bhandari_authenticated');
+      const sessionData = JSON.stringify({
+        email: AUTHORIZED_ADMIN_EMAIL,
+        authenticated: true,
+        loginTime: new Date().toISOString(),
+      });
+      sessionStorage.setItem(AUTH_KEY, sessionData);
+      localStorage.setItem(AUTH_KEY, sessionData);
     } catch (e) {
       console.warn('Session storage error:', e);
     }
     return { success: true };
   }
 
-  return { success: false, message: 'Incorrect administrator password.' };
+  return { success: false, message: 'Incorrect administrator password. Please verify credentials.' };
 }
 
 export function logoutAdmin(): void {

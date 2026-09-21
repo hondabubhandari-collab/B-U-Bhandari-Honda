@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ShieldAlert, Lock, ArrowLeft, KeyRound, User, CheckCircle2 } from 'lucide-react';
-import { loginAdmin } from '../utils/adminReviewStore';
+import { ShieldAlert, Lock, ArrowLeft, KeyRound, Mail, AlertTriangle } from 'lucide-react';
+import { loginAdmin, AUTHORIZED_ADMIN_EMAIL } from '../utils/adminReviewStore';
 
 interface AdminLoginProps {
   onSuccess: () => void;
@@ -11,7 +11,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   onSuccess,
   onRedirectToPublic,
 }) => {
-  const [username, setUsername] = useState('admin');
+  const [email, setEmail] = useState('hondabubhandari@gmail.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -21,23 +21,36 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
     e.preventDefault();
     setError('');
 
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError('Please enter your administrator email address.');
+      return;
+    }
+
+    if (cleanEmail !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+      setError(
+        `Access Denied: The email "${email}" does not have administrative privileges. Only ${AUTHORIZED_ADMIN_EMAIL} is authorized. All other accounts are treated as public users.`
+      );
+      return;
+    }
+
     if (!password.trim()) {
-      setError('Please enter the administrative password.');
+      setError('Please enter the administrator password.');
       return;
     }
 
     setIsSubmitting(true);
-    // Instant local check (free browser authentication)
+    // Instant verification against exact email & credentials
     setTimeout(() => {
-      const res = loginAdmin(password, username);
+      const res = loginAdmin(cleanEmail, password);
       setIsSubmitting(false);
 
       if (res.success) {
         onSuccess();
       } else {
-        setError(res.message || 'Access denied. Incorrect administrator credentials.');
+        setError(res.message || 'Access denied. Incorrect credentials.');
       }
-    }, 250);
+    }, 200);
   };
 
   return (
@@ -55,38 +68,44 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         </div>
 
         {/* Access Restriction Notice */}
-        <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 flex items-start gap-2.5 text-xs text-amber-900">
+        <div className="bg-amber-50 border-b border-amber-200 px-5 py-3.5 flex items-start gap-2.5 text-xs text-amber-900">
           <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">Restricted Area: </span>
-            <span>
-              This analytics section is reserved exclusively for dealership management and review quality controllers.
-            </span>
+          <div className="space-y-1">
+            <span className="font-bold block">Strict Access Control Notice:</span>
+            <p className="text-[11px] leading-relaxed text-amber-800">
+              Only <strong className="font-semibold text-slate-900">{AUTHORIZED_ADMIN_EMAIL}</strong> is authorized to access Review Analytics, Review History, Reports, Sheets, and Spam Tracking. All other email addresses are treated as public users.
+            </p>
           </div>
         </div>
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
-              <span>{error}</span>
+            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+              <span className="leading-relaxed">{error}</span>
             </div>
           )}
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-slate-400" />
-              <span>Administrator Username</span>
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span>Authorized Admin Email</span>
             </label>
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. admin or manager"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError('');
+              }}
+              placeholder="hondabubhandari@gmail.com"
               required
               className="w-full text-xs text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 transition-all font-medium"
             />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Must exactly match: {AUTHORIZED_ADMIN_EMAIL}
+            </p>
           </div>
 
           <div>
@@ -106,7 +125,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             <input
               type={showPassword ? 'text' : 'password'}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError('');
+              }}
               placeholder="••••••••••••"
               required
               autoFocus
@@ -120,11 +142,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold tracking-wide transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
           >
             {isSubmitting ? (
-              <span>Verifying credentials...</span>
+              <span>Authenticating admin email...</span>
             ) : (
               <>
                 <Lock className="w-3.5 h-3.5" />
-                <span>Log In to Review Analytics</span>
+                <span>Verify Admin Email & Sign In</span>
               </>
             )}
           </button>
@@ -144,7 +166,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
 
         <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 text-center">
           <p className="text-[11px] text-slate-400">
-            Secure client-side session • No external authentication API used
+            Strict email enforcement: Only hondabubhandari@gmail.com
           </p>
         </div>
       </div>
