@@ -1,229 +1,644 @@
-import { ExperienceType, RatingType, ReviewFormData } from '../types';
+import { ExperienceType, RatingType, ReviewFormData, ReviewLanguage } from '../types';
+import { isReviewTooSimilar } from './reviewSimilarity';
 
 /**
- * Local Review Generator for B.U. Bhandari Honda – Camp Showroom
- * Generates genuine, natural customer reviews specifically for B.U. Bhandari Honda Camp Showroom.
- * - Mentions "B.U. Bhandari Honda – Camp Showroom" / "B.U. Bhandari Honda Camp Showroom" naturally.
- * - Naturally includes Sales/Service Employee Name and Team Name when provided.
- * - Matches the selected star rating accurately.
+ * Advanced Dynamic AI Review Generator for B.U. Bhandari Honda
+ * Generates unique, natural, highly varied customer reviews.
+ *
+ * Enforces:
+ * 1. Fresh review every time with zero duplicate structures
+ * 2. Natural variation in writing styles (Short/simple, Friendly, Professional, Conversational, Detailed, Emotional)
+ * 3. Natural variation in length (1-2 sentences, 3-4 sentences, 5-6 sentences)
+ * 4. Varied sequencing of points and vocabulary
+ * 5. Language support: English, Marathi, Hinglish, Simple English (with Auto variation)
+ * 6. Session-level duplicate detection and automated regeneration
  */
 
-function getVariationIndex(seedString: string, max: number): number {
-  let hash = 0;
-  for (let i = 0; i < seedString.length; i++) {
-    hash = (hash << 5) - hash + seedString.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash) % max;
+export type WritingStyle =
+  | 'short_simple'
+  | 'friendly'
+  | 'professional'
+  | 'conversational'
+  | 'detailed'
+  | 'emotional';
+
+export type LengthProfile = 'short' | 'medium' | 'detailed';
+
+interface GeneratorOptions {
+  history?: string[];
+  forceLanguage?: ReviewLanguage;
+  seed?: number;
 }
 
-export function generateLocalReview(data: ReviewFormData, variationSeed?: number): string {
+// Helper: random choice from array
+function pickOne<T>(items: T[], rand = Math.random()): T {
+  return items[Math.floor(rand * items.length)];
+}
+
+// Helper: shuffle array
+function shuffle<T>(array: T[], rand = Math.random): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Helper: capitalize first letter
+function capitalize(text: string): string {
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// ==========================================
+// ENGLISH VOCABULARY & SENTENCE GENERATION
+// ==========================================
+
+const EN_OPENINGS_PURCHASE = [
+  'Decided on B.U. Bhandari Honda for our new vehicle, and the entire experience was delightful.',
+  'Recently bought a new vehicle from B.U. Bhandari Honda, and I am genuinely impressed by their service.',
+  'Walked into B.U. Bhandari Honda looking for our next family ride, and the team treated us with immense courtesy.',
+  'Getting my new Honda from B.U. Bhandari Honda was an effortless and pleasant journey.',
+  'Had a seamless vehicle purchase experience at B.U. Bhandari Honda from day one.',
+  'We just finalized our vehicle at B.U. Bhandari Honda and couldn’t be happier with how smoothly everything went.',
+  'Visiting B.U. Bhandari Honda for our vehicle booking turned out to be a great decision.',
+  'A very satisfying buying experience at B.U. Bhandari Honda.',
+  'Purchased our latest vehicle from B.U. Bhandari Honda and received wonderful assistance throughout.',
+  'From the first showroom walkthrough to finalizing the deal, B.U. Bhandari Honda stood out for their transparency.',
+  'B.U. Bhandari Honda made our vehicle purchase smooth, transparent, and completely stress-free.',
+  'Glad we chose B.U. Bhandari Honda for bringing home our new vehicle.',
+];
+
+const EN_OPENINGS_SERVICE = [
+  'Got my vehicle serviced at B.U. Bhandari Honda, and the work was carried out impeccably.',
+  'Visited B.U. Bhandari Honda for periodic maintenance and was impressed with their organized workshop.',
+  'My recent service visit to B.U. Bhandari Honda was prompt, professional, and very well handled.',
+  'Had an excellent experience with vehicle servicing at B.U. Bhandari Honda today.',
+  'Regular maintenance at B.U. Bhandari Honda has always been dependable, and this visit was no different.',
+  'B.U. Bhandari Honda took great care of my vehicle during the scheduled maintenance.',
+  'Smooth turnaround and transparent job estimates at B.U. Bhandari Honda service facility.',
+  'Brought my Honda in for servicing at B.U. Bhandari Honda, and it drives like new again.',
+];
+
+const EN_OPENINGS_DELIVERY = [
+  'Taking delivery of our vehicle from B.U. Bhandari Honda was truly a memorable occasion.',
+  'The vehicle handover ceremony at B.U. Bhandari Honda was organized with great warmth and punctuality.',
+  'Received our new vehicle delivery today from B.U. Bhandari Honda in sparkling condition.',
+  'Delivery day at B.U. Bhandari Honda was handled with complete professionalism and joy.',
+  'Smooth key handover and thorough vehicle walkthrough at B.U. Bhandari Honda.',
+  'Our delivery experience with B.U. Bhandari Honda was prompt, joyful, and completely hassle-free.',
+];
+
+const EN_ASPECTS_POSITIVE = [
+  'The vehicle test drive was arranged promptly and all features were demonstrated clearly.',
+  'Paperwork and documentation were processed swiftly without any confusing back-and-forth.',
+  'The staff took the time to answer every question patiently without rushing us.',
+  'Pricing and financing options were explained with complete clarity and no hidden surprises.',
+  'The showroom was neat, welcoming, and very well maintained.',
+  'The vehicle was prepped to perfection and delivered right on the committed hour.',
+  'Clear estimation, genuine spare parts, and thorough inspection gave us complete peace of mind.',
+  'Communication across all stages was proactive and reassuring.',
+  'Every single detail we requested was attended to diligently.',
+];
+
+const EN_CLOSINGS_POSITIVE = [
+  'Would readily recommend B.U. Bhandari Honda to all vehicle enthusiasts.',
+  'Truly appreciate the professionalism of the B.U. Bhandari Honda team.',
+  'Very happy with the overall support and loving the drive.',
+  'A solid 5-star experience from start to finish.',
+  'Big thanks to everyone at B.U. Bhandari Honda for making this so easy.',
+  'Will certainly return to B.U. Bhandari Honda for future services.',
+  'Definitely one of the best dealership experiences in Pune.',
+  'Kudos to the entire dealership team for their dedication.',
+  'Proud to be driving our new Honda. Highly satisfied!',
+  'Honest guidance, punctual delivery, and great hospitality.',
+];
+
+// Average / Constructive feedback (2-3 stars)
+const EN_AVERAGE_PURCHASE = [
+  'Purchased a vehicle from B.U. Bhandari Honda. While the vehicle is great, the process took longer than promised.',
+  'Decent overall buying experience at B.U. Bhandari Honda, though coordination between sales and billing could be faster.',
+  'My visit to B.U. Bhandari Honda was okay. The staff was polite, but paperwork turnaround needs improvement.',
+];
+
+const EN_POOR_FEEDBACK = [
+  'My recent visit to B.U. Bhandari Honda did not meet expectations due to unexpected delays and lack of updates.',
+  'Sharing constructive feedback for B.U. Bhandari Honda: the team needs better customer communication and proactive handling.',
+  'Experienced multiple delays during my visit to B.U. Bhandari Honda. Hoping management streamlines the handover process.',
+];
+
+// ==========================================
+// MARATHI (मराठी) REVIEW GENERATION
+// ==========================================
+
+const MR_OPENINGS_PURCHASE = [
+  'बी. यू. भंडारी होंडा कडून नवीन गाडी खरेदी करण्याचा अनुभव अतिशय सुंदर आणि समाधानकारक राहिला.',
+  'नुकतीच बी. यू. भंडारी होंडा येथून गाडी घेतली, आणि त्यांच्या सेवेने मन जिंकून घेतले.',
+  'आमच्या कुटुंबाच्या नव्या गाडीसाठी बी. यू. भंडारी होंडाची निवड केली आणि निर्णय अगदी योग्य ठरला.',
+  'बी. यू. भंडारी होंडा येथे गाडी बुकिंगपासून ते डिलिव्हरीपर्यंत सर्व कामे अगदी वेळेत आणि व्यवस्थित पार पडली.',
+  'गाडी खरेदीसाठी बी. यू. भंडारी होंडाला भेट दिली असता तेथील कर्मचाऱ्यांचे स्वागत आणि मार्गदर्शन उत्तम लाभले.',
+  'बी. यू. भंडारी होंडाच्या टीमने गाडी खरेदीची संपूर्ण प्रक्रिया अत्यंत सोपी आणि पारदर्शक ठेवली.',
+];
+
+const MR_OPENINGS_SERVICE = [
+  'बी. यू. भंडारी होंडा येथे गाडीच्या सर्व्हिसिंगचा अनुभव नेहमीप्रमाणेच उत्तम आणि विश्वासार्ह राहिला.',
+  'नियमित मेंटेनन्ससाठी बी. यू. भंडारी होंडाला भेट दिली, आणि गाडी अगदी नव्यासारखी स्मूथ करून दिली.',
+  'बी. यू. भंडारी होंडाच्या वर्कशॉपमधील तत्परता आणि कामाचा दर्जा कौतुकास्पद आहे.',
+  'गाडी सर्व्हिसिंगचे काम ठरलेल्या वेळेत आणि प्रामाणिकपणे बी. यू. भंडारी होंडा येथे पूर्ण झाले.',
+];
+
+const MR_OPENINGS_DELIVERY = [
+  'बी. यू. भंडारी होंडा येथे नवीन गाडीची चावी घेतानाचा क्षण आमच्या संपूर्ण कुटुंबासाठी अत्यंत आनंदाचा ठरला.',
+  'गाडीची डिलिव्हरी अगदी वेळेवर आणि अतिशय सुंदर सेरेमनीसह बी. यू. भंडारी होंडाने दिली.',
+  'गाडीचे हँडओव्हर आणि आवश्यक सर्व माहिती बी. यू. भंडारी होंडाच्या टीमने अतिशय सविस्तर समजावून सांगितली.',
+];
+
+const MR_ASPECTS_POSITIVE = [
+  'टेस्ट ड्राईव्ह अगदी वेळेवर मिळाली आणि गाडीच्या प्रत्येक फिचरची माहिती सविस्तर दिली.',
+  'कागदपत्रे आणि फायनान्सची प्रक्रिया कुठलाही त्रास न होता जलद गतीने पूर्ण झाली.',
+  'शोरूममधील स्वच्छता आणि सर्व कर्मचाऱ्यांचे सौजन्यपूर्ण संभाषण विशेष जाणवले.',
+  'सर्व खर्चाची माहिती सुरुवातीलाच स्पष्ट दिली, कोणतीही लपवाछपवी नव्हती.',
+  'गाडी एकदम चकाचक आणि सज्ज करून वेळेत सुपूर्द करण्यात आली.',
+  'ग्राहकांच्या प्रत्येक प्रश्नाला शांतपणे आणि आदराने उत्तरे देण्यात आली.',
+];
+
+const MR_CLOSINGS_POSITIVE = [
+  'बी. यू. भंडारी होंडाच्या संपूर्ण टीमचे मनापासून आभार!',
+  'नवीन होंडा गाडी घेणाऱ्या प्रत्येकाला मी बी. यू. भंडारी होंडाची शिफारस नक्की करेन.',
+  'अतिशय उत्कृष्ट सेवा आणि सहकार्य. खूप खूप धन्यवाद!',
+  'पुण्यातील सर्वोत्तम आणि विश्वासू होंडा डीलरशिप!',
+  'गाडी आणि सेवा दोन्हीबद्दल १००% समाधानी आहोत.',
+  'भविष्यातील सर्व्हिसिंगसाठीही बी. यू. भंडारी होंडावरच आमचा पूर्ण विश्वास असेल.',
+];
+
+const MR_AVERAGE_FEEDBACK = [
+  'बी. यू. भंडारी होंडा येथील अनुभव सर्वसाधारण राहिला. कामात अजून थोडी गती आणि सुसूत्रता हवी होती.',
+  'गाडी उत्तम आहे, पण बी. यू. भंडारी होंडा येथे कामासाठी थोडा जास्त वेळ लागला. पुढील वेळी अधिक चांगल्या सेवेची अपेक्षा आहे.',
+];
+
+// ==========================================
+// HINGLISH / MARATHI-ENGLISH GENERATION
+// ==========================================
+
+const HINGLISH_OPENINGS_PURCHASE = [
+  'B.U. Bhandari Honda madhun new vehicle purchase kela, and overall experience ekdam super hota!',
+  'Recently B.U. Bhandari Honda visit kela for our new ride. Showroom staff and management was very helpful.',
+  'B.U. Bhandari Honda se vehicle purchase ka experience sach me bahut smooth aur hassle-free raha.',
+  'Got our new vehicle from B.U. Bhandari Honda. Right from booking till delivery, everything went on time.',
+  'B.U. Bhandari Honda showroom madhe enter kelya pasun deliver hoin paraynt full support milaala.',
+];
+
+const HINGLISH_OPENINGS_SERVICE = [
+  'Vehicle service B.U. Bhandari Honda madhe karavla, and result is totally satisfying.',
+  'Periodic servicing at B.U. Bhandari Honda was done very professionally. Gaadi ekdam smooth chalat ahe.',
+  'B.U. Bhandari Honda service center team handled my vehicle maintenance on-time and with proper care.',
+];
+
+const HINGLISH_OPENINGS_DELIVERY = [
+  'Vehicle delivery ceremony at B.U. Bhandari Honda was memorable. Family members were really very happy!',
+  'On-time delivery and clean handover done by B.U. Bhandari Honda team today.',
+  'Keys handover smoothly jhaala B.U. Bhandari Honda madhe. Vehicle presentation was top class.',
+];
+
+const HINGLISH_ASPECTS_POSITIVE = [
+  'Test drive quickly arrange kela and features detail madhe explain kile.',
+  'Documentation and loan formalities without any delay complete jhaale.',
+  'Staff behaviour was super polite and attentive to our needs.',
+  'Vehicle bilkul clean aur ready condition me handover kiya gaya.',
+  'Transparent pricing and prompt updates at every single step.',
+];
+
+const HINGLISH_CLOSINGS_POSITIVE = [
+  'Big thanks to the entire B.U. Bhandari Honda team for this great experience!',
+  'Totally satisfied with B.U. Bhandari Honda. Highly recommended to friends & family.',
+  'Superb service quality. Glad we chose B.U. Bhandari Honda Pune!',
+  'Smooth buying process and supportive staff. 5 stars from my side.',
+];
+
+// ==========================================
+// SIMPLE CONVERSATIONAL ENGLISH
+// ==========================================
+
+const SIMPLE_EN_REVIEWS_PURCHASE = [
+  'Bought our new vehicle from B.U. Bhandari Honda. The staff was polite and explained everything clearly. The delivery was on time and we are very happy with our purchase.',
+  'Great buying experience at B.U. Bhandari Honda. Simple paperwork, quick test drive, and honest staff. Would recommend this dealership to everyone.',
+  'Smooth and quick vehicle purchase at B.U. Bhandari Honda. The showroom is clean and the staff is very supportive.',
+  'Got my Honda from B.U. Bhandari Honda. Everything was handled on schedule without any confusion. Thank you for the good service.',
+  'Very happy with B.U. Bhandari Honda. The vehicle was delivered clean and on time. Courteous team throughout.',
+];
+
+const SIMPLE_EN_REVIEWS_SERVICE = [
+  'Gave my vehicle for regular service at B.U. Bhandari Honda. Timely delivery and clean washing. Drives very smoothly now.',
+  'Service at B.U. Bhandari Honda was quick and professional. Fair billing and friendly staff.',
+  'Dependable vehicle service at B.U. Bhandari Honda. The advisor explained the job card clearly and delivered on time.',
+];
+
+const SIMPLE_EN_REVIEWS_DELIVERY = [
+  'Vehicle delivery at B.U. Bhandari Honda was on time and pleasant. All documents were ready and explained nicely.',
+  'Smooth delivery ceremony at B.U. Bhandari Honda. The vehicle was spotless and the staff was very warm.',
+];
+
+// ==========================================
+// STAFF MENTION BUILDERS
+// ==========================================
+
+function buildStaffSentence(
+  employeeName?: string,
+  teamName?: string,
+  lang: ReviewLanguage = 'English',
+  isPositive = true
+): string {
+  const emp = employeeName?.trim();
+  const team = teamName?.trim();
+
+  if (!emp && !team) return '';
+
+  if (lang === 'Marathi') {
+    if (emp && team) {
+      return isPositive
+        ? ` ${emp} आणि ${team} यांनी दाखवलेले सहकार्य आणि तत्परता विशेष कौतुकास्पद होती.`
+        : ` या भेटीदरम्यान ${emp} व ${team} यांच्याशी चर्चा झाली.`;
+    }
+    if (emp) {
+      return isPositive
+        ? ` विशेषतः ${emp} यांनी सर्व गोष्टी अतिशय शांतपणे आणि स्पष्ट समजावून सांगितल्या.`
+        : ` ${emp} यांच्याशी समन्वय साधला.`;
+    }
+    if (team) {
+      return isPositive
+        ? ` ${team} कडून मिळालेले सहकार्य खूप चांगले होते.`
+        : ` ${team} सोबत या कामाबाबत बोलणे झाले.`;
+    }
+  }
+
+  if (lang === 'Hinglish') {
+    if (emp && team) {
+      return isPositive
+        ? ` Special thanks to ${emp} and ${team} for their polite and fast support.`
+        : ` Interacted with ${emp} and ${team} during this visit.`;
+    }
+    if (emp) {
+      return isPositive
+        ? ` ${emp} was very supportive and explained each detail patiently.`
+        : ` Coordinated with ${emp} regarding my query.`;
+    }
+    if (team) {
+      return isPositive
+        ? ` ${team} handled all the formalities smoothly.`
+        : ` Handled by ${team} during the visit.`;
+    }
+  }
+
+  // English & Simple English
+  if (emp && team) {
+    const variations = [
+      ` Special appreciation to ${emp} and the ${team} for their warm guidance throughout.`,
+      ` Huge thanks to ${emp} along with the ${team} for ensuring everything went effortlessly.`,
+      ` Both ${emp} and the ${team} were attentive, knowledgeable, and genuinely helpful.`,
+      ` Sincere thanks to ${emp} and the ${team} for prompt updates and support.`,
+    ];
+    return isPositive ? pickOne(variations) : ` Dealt with ${emp} and the ${team} during this process.`;
+  }
+
+  if (emp) {
+    const variations = [
+      ` Special mention to ${emp} for guiding us patiently through every detail.`,
+      ` A shoutout to ${emp} for providing clear answers and professional advice.`,
+      ` Appreciate ${emp} for the courteous approach and transparent explanations.`,
+      ` ${emp} made sure all our queries were addressed without any delay.`,
+    ];
+    return isPositive ? pickOne(variations) : ` Coordinated with ${emp} regarding this request.`;
+  }
+
+  if (team) {
+    const variations = [
+      ` The ${team} was proactive and made sure all formalities went through smoothly.`,
+      ` Commendable coordination by the ${team} throughout our visit.`,
+      ` The entire ${team} was approachable and highly cooperative.`,
+    ];
+    return isPositive ? pickOne(variations) : ` Dealt with the ${team} during this visit.`;
+  }
+
+  return '';
+}
+
+// ==========================================
+// CORE SYNTHESIS ENGINE
+// ==========================================
+
+function synthesizeEnglishReview(
+  experienceType: ExperienceType,
+  rating: RatingType,
+  selectedAspects: string[],
+  employeeName?: string,
+  teamName?: string,
+  additionalComments?: string,
+  style: WritingStyle = 'conversational',
+  length: LengthProfile = 'medium'
+): string {
+  const isPositive = rating.startsWith('5') || rating.startsWith('4') || rating.startsWith('3');
+  const isAverage = rating.startsWith('2');
+  const isPoor = rating.startsWith('1');
+
+  const staff = buildStaffSentence(employeeName, teamName, 'English', isPositive);
+  const comments = additionalComments?.trim()
+    ? ` ${additionalComments.trim().endsWith('.') ? additionalComments.trim() : `${additionalComments.trim()}.`}`
+    : '';
+
+  // 1-2 Stars Constructive
+  if (isPoor) {
+    const opening = pickOne(EN_POOR_FEEDBACK);
+    return `${opening}${staff}${comments}`;
+  }
+  if (isAverage) {
+    const opening = pickOne(EN_AVERAGE_PURCHASE);
+    return `${opening}${staff}${comments}`;
+  }
+
+  // 3-5 Stars Positive
+  let openingPool = EN_OPENINGS_PURCHASE;
+  if (experienceType === 'Vehicle Service') openingPool = EN_OPENINGS_SERVICE;
+  if (experienceType === 'Vehicle Delivery') openingPool = EN_OPENINGS_DELIVERY;
+
+  // Selected user aspects to highlight phrase
+  let userAspectsSentence = '';
+  if (selectedAspects && selectedAspects.length > 0) {
+    const shuffledAspects = shuffle(selectedAspects);
+    const chosen = shuffledAspects.slice(0, 2);
+    const aspectConnectors = [
+      `In particular, the ${chosen.map((a) => a.toLowerCase()).join(' and ')} stood out positively.`,
+      `We especially appreciated the focus on ${chosen.map((a) => a.toLowerCase()).join(' as well as ')}.`,
+      `The attention given to ${chosen.map((a) => a.toLowerCase()).join(' and ')} made a significant difference.`,
+      `From ${chosen[0].toLowerCase()} to overall support, everything felt seamless.`,
+    ];
+    userAspectsSentence = ` ${pickOne(aspectConnectors)}`;
+  } else {
+    // Pick 1 random natural aspect
+    userAspectsSentence = ` ${pickOne(EN_ASPECTS_POSITIVE)}`;
+  }
+
+  const opening = pickOne(openingPool);
+  const closing = pickOne(EN_CLOSINGS_POSITIVE);
+
+  // Vary structures based on length and style
+  if (length === 'short' || style === 'short_simple') {
+    // 1-2 sentences
+    const shortFormats = [
+      `${opening} ${closing}${comments}`,
+      `${opening}${staff}${comments}`,
+      `${opening}${userAspectsSentence}${comments}`,
+    ];
+    return pickOne(shortFormats);
+  }
+
+  if (length === 'detailed' || style === 'detailed') {
+    // 4-6 sentences
+    const naturalDetail = pickOne(EN_ASPECTS_POSITIVE);
+    const detailedFormats = [
+      `${opening}${userAspectsSentence} ${naturalDetail}${staff} ${closing}${comments}`,
+      `${opening}${staff}${userAspectsSentence} ${naturalDetail} ${closing}${comments}`,
+      `${opening} ${naturalDetail}${userAspectsSentence}${staff} ${closing}${comments}`,
+    ];
+    return pickOne(detailedFormats);
+  }
+
+  // Medium (3-4 sentences)
+  const mediumFormats = [
+    `${opening}${userAspectsSentence}${staff} ${closing}${comments}`,
+    `${opening}${staff}${userAspectsSentence} ${closing}${comments}`,
+    `${opening} ${pickOne(EN_ASPECTS_POSITIVE)}${staff} ${closing}${comments}`,
+  ];
+  return pickOne(mediumFormats);
+}
+
+function synthesizeMarathiReview(
+  experienceType: ExperienceType,
+  rating: RatingType,
+  selectedAspects: string[],
+  employeeName?: string,
+  teamName?: string,
+  additionalComments?: string,
+  length: LengthProfile = 'medium'
+): string {
+  const isPositive = rating.startsWith('5') || rating.startsWith('4') || rating.startsWith('3');
+  const staff = buildStaffSentence(employeeName, teamName, 'Marathi', isPositive);
+  const comments = additionalComments?.trim()
+    ? ` ${additionalComments.trim().endsWith('.') ? additionalComments.trim() : `${additionalComments.trim()}.`}`
+    : '';
+
+  if (!isPositive) {
+    const feedback = pickOne(MR_AVERAGE_FEEDBACK);
+    return `${feedback}${staff}${comments}`;
+  }
+
+  let openingPool = MR_OPENINGS_PURCHASE;
+  if (experienceType === 'Vehicle Service') openingPool = MR_OPENINGS_SERVICE;
+  if (experienceType === 'Vehicle Delivery') openingPool = MR_OPENINGS_DELIVERY;
+
+  const opening = pickOne(openingPool);
+  const closing = pickOne(MR_CLOSINGS_POSITIVE);
+  const aspect = pickOne(MR_ASPECTS_POSITIVE);
+
+  if (length === 'short') {
+    return `${opening} ${closing}${comments}`;
+  }
+
+  if (length === 'detailed') {
+    const aspect2 = pickOne(MR_ASPECTS_POSITIVE);
+    return `${opening} ${aspect} ${aspect2}${staff} ${closing}${comments}`;
+  }
+
+  return `${opening} ${aspect}${staff} ${closing}${comments}`;
+}
+
+function synthesizeHinglishReview(
+  experienceType: ExperienceType,
+  rating: RatingType,
+  selectedAspects: string[],
+  employeeName?: string,
+  teamName?: string,
+  additionalComments?: string,
+  length: LengthProfile = 'medium'
+): string {
+  const isPositive = rating.startsWith('5') || rating.startsWith('4') || rating.startsWith('3');
+  const staff = buildStaffSentence(employeeName, teamName, 'Hinglish', isPositive);
+  const comments = additionalComments?.trim()
+    ? ` ${additionalComments.trim().endsWith('.') ? additionalComments.trim() : `${additionalComments.trim()}.`}`
+    : '';
+
+  if (!isPositive) {
+    return `B.U. Bhandari Honda experience was average. Service and coordination time could be improved.${staff}${comments}`;
+  }
+
+  let openingPool = HINGLISH_OPENINGS_PURCHASE;
+  if (experienceType === 'Vehicle Service') openingPool = HINGLISH_OPENINGS_SERVICE;
+  if (experienceType === 'Vehicle Delivery') openingPool = HINGLISH_OPENINGS_DELIVERY;
+
+  const opening = pickOne(openingPool);
+  const closing = pickOne(HINGLISH_CLOSINGS_POSITIVE);
+  const aspect = pickOne(HINGLISH_ASPECTS_POSITIVE);
+
+  if (length === 'short') {
+    return `${opening} ${closing}${comments}`;
+  }
+
+  if (length === 'detailed') {
+    const aspect2 = pickOne(HINGLISH_ASPECTS_POSITIVE);
+    return `${opening} ${aspect}. ${aspect2}.${staff} ${closing}${comments}`;
+  }
+
+  return `${opening} ${aspect}.${staff} ${closing}${comments}`;
+}
+
+function synthesizeSimpleEnglishReview(
+  experienceType: ExperienceType,
+  rating: RatingType,
+  employeeName?: string,
+  teamName?: string,
+  additionalComments?: string
+): string {
+  const isPositive = rating.startsWith('5') || rating.startsWith('4') || rating.startsWith('3');
+  const staff = buildStaffSentence(employeeName, teamName, 'Simple English', isPositive);
+  const comments = additionalComments?.trim()
+    ? ` ${additionalComments.trim().endsWith('.') ? additionalComments.trim() : `${additionalComments.trim()}.`}`
+    : '';
+
+  let pool = SIMPLE_EN_REVIEWS_PURCHASE;
+  if (experienceType === 'Vehicle Service') pool = SIMPLE_EN_REVIEWS_SERVICE;
+  if (experienceType === 'Vehicle Delivery') pool = SIMPLE_EN_REVIEWS_DELIVERY;
+
+  const base = pickOne(pool);
+  return `${base}${staff}${comments}`;
+}
+
+/**
+ * Main Generation Entrypoint with Automated Duplicate Prevention & Session History
+ */
+export function generateLocalReview(
+  data: ReviewFormData,
+  variationSeed?: number | GeneratorOptions
+): string {
   const {
     experienceType,
     rating,
     employeeName,
     teamName,
-    selectedAspects,
+    selectedAspects = [],
     additionalComments,
+    language = 'Auto',
   } = data;
 
   if (!experienceType || !rating) {
     return 'Please select your experience and rating to generate a review.';
   }
 
-  const cleanEmployee = employeeName?.trim();
-  const cleanTeam = teamName?.trim();
-  const cleanComments = additionalComments?.trim();
+  let history: string[] = [];
+  let userForcedLanguage: ReviewLanguage = language || 'Auto';
 
-  // Combine aspects into a natural phrase
-  const aspectsList = Array.isArray(selectedAspects) ? selectedAspects : [];
-  let aspectsPhrase = '';
-  if (aspectsList.length === 1) {
-    aspectsPhrase = aspectsList[0].toLowerCase();
-  } else if (aspectsList.length === 2) {
-    aspectsPhrase = `${aspectsList[0].toLowerCase()} and ${aspectsList[1].toLowerCase()}`;
-  } else if (aspectsList.length > 2) {
-    const last = aspectsList[aspectsList.length - 1].toLowerCase();
-    const rest = aspectsList.slice(0, -1).map((a) => a.toLowerCase()).join(', ');
-    aspectsPhrase = `${rest}, and ${last}`;
-  }
-
-  // Determine sentiment level from RatingType
-  const is5Star = rating.startsWith('5');
-  const is4Star = rating.startsWith('4');
-  const is3Star = rating.startsWith('3');
-  const is2Star = rating.startsWith('2');
-  const is1Star = rating.startsWith('1');
-  const isPositive = is5Star || is4Star || is3Star;
-
-  // Staff / Team sentence builder (ONLY if explicitly provided)
-  let staffSentence = '';
-  if (cleanEmployee && cleanTeam) {
-    if (isPositive) {
-      staffSentence = ` Special thanks to ${cleanEmployee} and the ${cleanTeam} for their attentive support and guidance.`;
-    } else {
-      staffSentence = ` Interacted with ${cleanEmployee} and the ${cleanTeam} during this visit.`;
+  if (typeof variationSeed === 'object' && variationSeed !== null) {
+    if (Array.isArray(variationSeed.history)) {
+      history = variationSeed.history;
     }
-  } else if (cleanEmployee) {
-    if (isPositive) {
-      staffSentence = ` Special mention to ${cleanEmployee} for explaining everything clearly and assisting so well.`;
-    } else {
-      staffSentence = ` Coordinated with ${cleanEmployee} regarding my request.`;
-    }
-  } else if (cleanTeam) {
-    if (isPositive) {
-      staffSentence = ` The ${cleanTeam} was cooperative and helped answer all questions.`;
-    } else {
-      staffSentence = ` Dealt with the ${cleanTeam} during my visit.`;
+    if (variationSeed.forceLanguage) {
+      userForcedLanguage = variationSeed.forceLanguage;
     }
   }
 
-  // Additional comments integration
-  let commentsSentence = '';
-  if (cleanComments) {
-    const formattedComment = cleanComments.endsWith('.') ? cleanComments : `${cleanComments}.`;
-    commentsSentence = ` ${formattedComment}`;
+  // Languages pool for 'Auto': mix English (50%), Marathi (25%), Hinglish (15%), Simple English (10%)
+  const autoLanguages: ReviewLanguage[] = [
+    'English',
+    'English',
+    'English',
+    'Marathi',
+    'Marathi',
+    'Hinglish',
+    'Simple English',
+  ];
+
+  const styles: WritingStyle[] = [
+    'short_simple',
+    'friendly',
+    'professional',
+    'conversational',
+    'detailed',
+    'emotional',
+  ];
+
+  const lengths: LengthProfile[] = ['short', 'medium', 'medium', 'detailed'];
+
+  let bestCandidate = '';
+  let lowestSimilarity = 1.0;
+
+  // Run up to 25 candidate generation attempts to guarantee uniqueness against session history
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const chosenLang =
+      userForcedLanguage && userForcedLanguage !== 'Auto'
+        ? userForcedLanguage
+        : pickOne(autoLanguages);
+
+    const chosenStyle = pickOne(styles);
+    const chosenLength = pickOne(lengths);
+
+    let candidate = '';
+
+    if (chosenLang === 'Marathi') {
+      candidate = synthesizeMarathiReview(
+        experienceType,
+        rating,
+        selectedAspects,
+        employeeName,
+        teamName,
+        additionalComments,
+        chosenLength
+      );
+    } else if (chosenLang === 'Hinglish') {
+      candidate = synthesizeHinglishReview(
+        experienceType,
+        rating,
+        selectedAspects,
+        employeeName,
+        teamName,
+        additionalComments,
+        chosenLength
+      );
+    } else if (chosenLang === 'Simple English') {
+      candidate = synthesizeSimpleEnglishReview(
+        experienceType,
+        rating,
+        employeeName,
+        teamName,
+        additionalComments
+      );
+    } else {
+      // English
+      candidate = synthesizeEnglishReview(
+        experienceType,
+        rating,
+        selectedAspects,
+        employeeName,
+        teamName,
+        additionalComments,
+        chosenStyle,
+        chosenLength
+      );
+    }
+
+    // Clean extra whitespace
+    candidate = candidate.replace(/\s+/g, ' ').trim();
+
+    // Check similarity against session history
+    const { isDuplicate, maxSimilarity } = isReviewTooSimilar(candidate, history, 0.38);
+
+    if (!isDuplicate) {
+      return candidate;
+    }
+
+    if (maxSimilarity < lowestSimilarity) {
+      lowestSimilarity = maxSimilarity;
+      bestCandidate = candidate;
+    }
   }
 
-  const seed =
-    variationSeed !== undefined
-      ? variationSeed
-      : getVariationIndex(
-          `${experienceType}-${rating}-${cleanEmployee}-${cleanTeam}-${aspectsList.join('-')}-${Date.now() % 100}`,
-          20
-        );
-
-  if (experienceType === 'New Vehicle Purchase') {
-    return buildNewVehicleReview(rating, aspectsPhrase, staffSentence, commentsSentence, seed);
-  } else if (experienceType === 'Vehicle Service') {
-    return buildVehicleServiceReview(rating, aspectsPhrase, staffSentence, commentsSentence, seed);
-  } else {
-    return buildVehicleDeliveryReview(rating, aspectsPhrase, staffSentence, commentsSentence, seed);
-  }
-}
-
-function buildNewVehicleReview(
-  rating: RatingType,
-  aspects: string,
-  staff: string,
-  comments: string,
-  seed: number
-): string {
-  const isPositive = rating.startsWith('5') || rating.startsWith('4') || rating.startsWith('3');
-  const isAverage = rating.startsWith('2');
-
-  if (isPositive) {
-    const templates = [
-      `I had a fantastic experience purchasing my vehicle from B.U. Bhandari Honda.${aspects ? ` The ${aspects} made the entire buying process effortless.` : ''}${staff} Truly impressed with their customer service and transparent guidance.${comments}`,
-      `Buying a vehicle at B.U. Bhandari Honda was an absolute pleasure.${aspects ? ` Appreciated the ${aspects} throughout the visit.` : ''}${staff} Highly recommend this dealership to anyone planning to purchase a Honda.${comments}`,
-      `Visited B.U. Bhandari Honda for buying a Honda and received wonderful assistance.${aspects ? ` Everything from ${aspects} was handled with great care.` : ''}${staff} Very satisfied with the overall sales experience!${comments}`,
-      `My new vehicle purchase at B.U. Bhandari Honda went very smoothly.${aspects ? ` The team ensured ${aspects}.` : ''}${staff} A dependable dealership with great professionalism.${comments}`,
-      `Purchased my vehicle from B.U. Bhandari Honda. The customer service was top-notch.${aspects ? ` Really valued the ${aspects}.` : ''}${staff} Glad I chose B.U. Bhandari Honda.${comments}`,
-      `Great buying experience at B.U. Bhandari Honda.${aspects ? ` The ${aspects} stood out during my purchase journey.` : ''}${staff} Transparent dealing, smooth test drive, and very courteous staff.${comments}`,
-      `Had a seamless experience acquiring my new vehicle at B.U. Bhandari Honda.${aspects ? ` The focus on ${aspects} was evident.` : ''}${staff} Thank you for making my purchase so memorable.${comments}`,
-      `B.U. Bhandari Honda provides a wonderful environment for buying a new vehicle.${aspects ? ` We noticed ${aspects} right from day one.` : ''}${staff} Great work by the showroom team.${comments}`,
-      `Very pleased with our new vehicle purchase from B.U. Bhandari Honda.${aspects ? ` The ${aspects} made the decision easy and hassle-free.` : ''}${staff} Would definitely recommend this dealership to friends and family.${comments}`,
-      `Exceptional customer service at B.U. Bhandari Honda while buying my vehicle.${aspects ? ` They took care of ${aspects} without any delays.` : ''}${staff} Happy with our new vehicle!${comments}`,
-    ];
-    return templates[seed % templates.length];
-  } else if (isAverage) {
-    const templates = [
-      `Purchased a vehicle at B.U. Bhandari Honda. The overall buying process was average.${aspects ? ` While there was some focus on ${aspects}, there is room for improvement.` : ''}${staff} Expecting better communication in the future.${comments}`,
-      `My vehicle purchase at B.U. Bhandari Honda was an okay experience.${aspects ? ` Experience with ${aspects} was moderate.` : ''}${staff} The showroom could streamline certain steps to make it smoother for customers.${comments}`,
-      `Visited B.U. Bhandari Honda for a vehicle purchase. The purchase was completed decently, but the turnaround time could be improved.${aspects ? ` ${aspects} was satisfactory.` : ''}${staff}${comments}`,
-    ];
-    return templates[seed % templates.length];
-  } else {
-    // 1 Star / Needs Improvement
-    const templates = [
-      `Purchased a vehicle at B.U. Bhandari Honda. The overall sales experience needs improvement.${aspects ? ` Areas concerning ${aspects} require better coordination.` : ''}${staff} Sharing this feedback so the dealership can enhance their customer service.${comments}`,
-      `My recent buying experience at B.U. Bhandari Honda did not meet my expectations.${aspects ? ` Facing delays with ${aspects} was inconvenient.` : ''}${staff} Hope management addresses these operational aspects.${comments}`,
-      `Sharing feedback regarding my vehicle purchase at B.U. Bhandari Honda.${aspects ? ` The process around ${aspects} could be managed much better.` : ''}${staff} Hoping for proactive improvement in customer handling.${comments}`,
-    ];
-    return templates[seed % templates.length];
-  }
-}
-
-function buildVehicleServiceReview(
-  rating: RatingType,
-  aspects: string,
-  staff: string,
-  comments: string,
-  seed: number
-): string {
-  const isPositive = rating.startsWith('5') || rating.startsWith('4') || rating.startsWith('3');
-  const isAverage = rating.startsWith('2');
-
-  if (isPositive) {
-    const templates = [
-      `I had a great vehicle service experience at B.U. Bhandari Honda.${aspects ? ` The ${aspects} ensured my vehicle runs smoothly.` : ''}${staff} Prompt and dependable after-sales service.${comments}`,
-      `My periodic service at B.U. Bhandari Honda was carried out smoothly.${aspects ? ` Appreciated the ${aspects} and on-time vehicle handover.` : ''}${staff} Very satisfied with the workshop quality.${comments}`,
-      `Got my vehicle serviced at B.U. Bhandari Honda.${aspects ? ` The ${aspects} was done thoroughly.` : ''}${staff} Vehicle performance has noticeably improved post-service.${comments}`,
-      `Regular maintenance at B.U. Bhandari Honda has always been a positive experience.${aspects ? ` Impressed by the ${aspects}.` : ''}${staff} Honest advice, genuine parts, and proper attention to details.${comments}`,
-      `Excellent service support at B.U. Bhandari Honda.${aspects ? ` The team took good care of ${aspects}.` : ''}${staff} Vehicle was washed and delivered in great condition on time.${comments}`,
-      `Timely and efficient vehicle service at B.U. Bhandari Honda.${aspects ? ` The ${aspects} was handled very professionally.` : ''}${staff} Highly recommend for Honda servicing.${comments}`,
-      `Had my vehicle serviced at B.U. Bhandari Honda. The ride quality is super smooth now.${aspects ? ` Glad to see the emphasis on ${aspects}.` : ''}${staff} Reliable service advisors and technicians.${comments}`,
-      `Very pleased with the periodic maintenance at B.U. Bhandari Honda.${aspects ? ` The ${aspects} made the visit hassle-free.` : ''}${staff} Good transparency in job card and billing.${comments}`,
-      `B.U. Bhandari Honda delivered great after-sales service quality today.${aspects ? ` Appreciate the focus on ${aspects}.` : ''}${staff} Smooth running and well maintained.${comments}`,
-      `Professional vehicle service at B.U. Bhandari Honda.${aspects ? ` Everything regarding ${aspects} was explained clearly before work began.` : ''}${staff} Will return for future servicing.${comments}`,
-    ];
-    return templates[seed % templates.length];
-  } else if (isAverage) {
-    const templates = [
-      `Got my vehicle serviced at B.U. Bhandari Honda. The overall service was average.${aspects ? ` While ${aspects} was handled okay, the waiting time could be reduced.` : ''}${staff}${comments}`,
-      `My periodic service visit to B.U. Bhandari Honda was satisfactory but had scope for improvement.${aspects ? ` Work on ${aspects} was acceptable.` : ''}${staff} Hoping for faster turnaround next time.${comments}`,
-      `Vehicle service at B.U. Bhandari Honda was moderate.${aspects ? ` Attention to ${aspects} was average.` : ''}${staff} The workshop could improve promptness in communication.${comments}`,
-    ];
-    return templates[seed % templates.length];
-  } else {
-    // 1 Star / Needs Improvement
-    const templates = [
-      `My recent service visit to B.U. Bhandari Honda needs improvement.${aspects ? ` Issues around ${aspects} were not resolved satisfactorily.` : ''}${staff} Providing this feedback so the service department can improve quality control.${comments}`,
-      `Had an unsatisfactory service experience at B.U. Bhandari Honda.${aspects ? ` Delays and lack of attention to ${aspects} need management review.` : ''}${staff} Expecting better resolution for customer concerns.${comments}`,
-      `Feedback regarding vehicle service at B.U. Bhandari Honda.${aspects ? ` Handling of ${aspects} was below expectations.` : ''}${staff} Hope the service department takes corrective steps.${comments}`,
-    ];
-    return templates[seed % templates.length];
-  }
-}
-
-function buildVehicleDeliveryReview(
-  rating: RatingType,
-  aspects: string,
-  staff: string,
-  comments: string,
-  seed: number
-): string {
-  const isPositive = rating.startsWith('5') || rating.startsWith('4') || rating.startsWith('3');
-  const isAverage = rating.startsWith('2');
-
-  if (isPositive) {
-    const templates = [
-      `Delighted with the vehicle delivery at B.U. Bhandari Honda!${aspects ? ` The ${aspects} made the key handover truly memorable.` : ''}${staff} A warm and welcoming showroom team.${comments}`,
-      `Taking delivery of my new vehicle from B.U. Bhandari Honda was an awesome experience.${aspects ? ` Appreciated the ${aspects} and detailed walkthrough.` : ''}${staff} Thank you for making our delivery day special.${comments}`,
-      `Punctual and joyful delivery at B.U. Bhandari Honda.${aspects ? ` The ${aspects} made the handover ceremony smooth and pleasant.` : ''}${staff} Proud owner of a new Honda!${comments}`,
-      `Received our new vehicle delivery right on the promised time from B.U. Bhandari Honda.${aspects ? ` Great care was taken with ${aspects}.` : ''}${staff} Everything was explained clearly before driving off.${comments}`,
-      `The delivery and handover at B.U. Bhandari Honda was seamless and very well organized.${aspects ? ` We loved the ${aspects}.` : ''}${staff} Highly satisfied with their professionalism and courteous approach.${comments}`,
-      `Wonderful delivery ceremony at B.U. Bhandari Honda.${aspects ? ` The ${aspects} added a special touch to the entire celebration.` : ''}${staff} The vehicle was in pristine condition.${comments}`,
-      `Smooth key handover and vehicle documentation at B.U. Bhandari Honda.${aspects ? ` Appreciated the ${aspects}.` : ''}${staff} The team ensured everything was ready without any waiting.${comments}`,
-      `Had a memorable delivery experience for our vehicle at B.U. Bhandari Honda.${aspects ? ` The ${aspects} made us feel truly valued.` : ''}${staff} Keep up the great customer care!${comments}`,
-      `Very happy with the delivery process at B.U. Bhandari Honda.${aspects ? ` All details regarding ${aspects} were handled with precision.` : ''}${staff} Vehicle was sparkling clean and ready to go.${comments}`,
-      `Excellent delivery day experience at B.U. Bhandari Honda.${aspects ? ` The ${aspects} made it a joyful moment for our family.` : ''}${staff} Thank you to the entire staff.${comments}`,
-    ];
-    return templates[seed % templates.length];
-  } else if (isAverage) {
-    const templates = [
-      `Vehicle delivery at B.U. Bhandari Honda was average.${aspects ? ` While ${aspects} was okay, there was some unexpected waiting time before handover.` : ''}${staff}${comments}`,
-      `Took delivery of our vehicle at B.U. Bhandari Honda. The handover was decent.${aspects ? ` Experience with ${aspects} was satisfactory.` : ''}${staff} Process could be streamlined further.${comments}`,
-      `Delivery experience at B.U. Bhandari Honda was moderate.${aspects ? ` Handover of ${aspects} was okay.` : ''}${staff} Better vehicle readiness prior to customer arrival would help.${comments}`,
-    ];
-    return templates[seed % templates.length];
-  } else {
-    // 1 Star / Needs Improvement
-    const templates = [
-      `Delivery experience at B.U. Bhandari Honda needs improvement.${aspects ? ` Handover regarding ${aspects} took longer than committed.` : ''}${staff} Sharing this feedback to help the showroom improve delivery coordination.${comments}`,
-      `Faced delays during my new vehicle delivery at B.U. Bhandari Honda.${aspects ? ` Issues with ${aspects} caused unnecessary waiting.` : ''}${staff} Hoping the team improves vehicle readiness on delivery day.${comments}`,
-      `Feedback on vehicle delivery at B.U. Bhandari Honda.${aspects ? ` The process surrounding ${aspects} was unorganized.` : ''}${staff} Expecting better punctuality and communication from the team.${comments}`,
-    ];
-    return templates[seed % templates.length];
-  }
+  return bestCandidate || 'Excellent customer service and smooth experience at B.U. Bhandari Honda.';
 }

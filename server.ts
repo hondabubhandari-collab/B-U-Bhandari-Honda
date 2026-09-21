@@ -260,7 +260,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 1. Improve Review with Gemini AI (Called ONLY on explicit button click)
+// 1. Improve or Generate AI Review with Gemini (Unique, varied tone, length, language, duplicate prevention)
 app.post('/api/improve-review', async (req, res) => {
   const {
     experienceType,
@@ -270,6 +270,8 @@ app.post('/api/improve-review', async (req, res) => {
     teamName,
     additionalComments,
     currentReview,
+    language,
+    history,
   } = req.body;
 
   if (!currentReview) {
@@ -284,48 +286,54 @@ app.post('/api/improve-review', async (req, res) => {
     });
   }
 
-  // Enforce 5-second timeout
+  // Enforce 4.8-second timeout
   const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
     setTimeout(() => resolve({ isTimeout: true }), 4800)
   );
 
   try {
-    const prompt = `You are an expert customer review assistant for "B.U. Bhandari Honda – Camp Showroom" in Pune.
-Refine the customer review draft to sound completely natural, fluent, and genuine, preserving the EXACT sentiment and rating.
+    const historyList = Array.isArray(history) ? history.slice(-5) : [];
+    const prompt = `You are an expert customer review assistant for "B.U. Bhandari Honda" in Pune.
+Generate a completely UNIQUE, natural customer review. It must NOT resemble previous reviews or use repeated template phrases.
 
-Details provided:
-- Dealership: B.U. Bhandari Honda – Camp Showroom (Camp Showroom only; do NOT mention Bhawani Peth, Mundhwa, Baner, or any other branch)
-- Experience: ${experienceType || 'General'}
-- Rating: ${rating || '5 Stars'}
-- Customer Highlights: ${Array.isArray(selectedAspects) && selectedAspects.length ? selectedAspects.join(', ') : 'None specified'}
-- Sales / Service Employee Name: ${employeeName ? employeeName : 'None provided'}
-- Team Name: ${teamName ? teamName : 'None provided'}
+Customer Experience Details:
+- Dealership: B.U. Bhandari Honda
+- Experience Type: ${experienceType || 'Vehicle Purchase'}
+- Rating: ${rating || '5 Stars (Excellent)'}
+- Highlights: ${Array.isArray(selectedAspects) && selectedAspects.length ? selectedAspects.join(', ') : 'None specified'}
+- Staff Member Mention: ${employeeName ? employeeName : 'None'}
+- Team Mention: ${teamName ? teamName : 'None'}
 - Additional Remarks: ${additionalComments ? additionalComments : 'None'}
+- Target Language: ${language && language !== 'Auto' ? language : 'Vary naturally between English, Marathi, or Hinglish'}
 
-Current Review Draft:
-"${currentReview}"
+Previous Reviews to strictly AVOID copying or paraphrasing closely:
+${historyList.length ? historyList.map((h, i) => `${i + 1}. "${h}"`).join('\n') : 'None'}
 
-STRICT RULES:
-1. Polish the review into an authentic 30-65 word customer review.
-2. NEVER invent employee names or team names not in the input. If ${employeeName ? `"${employeeName}"` : 'no employee name'} or ${teamName ? `"${teamName}"` : 'no team'} was provided, include ONLY what was given.
-3. Keep the customer's actual rating sentiment (${rating}).
-4. Always refer to the dealership as "B.U. Bhandari Honda – Camp Showroom" or "B.U. Bhandari Honda Camp Showroom".
-5. Return ONLY the plain review text. No quotes, no markdown, no headings.`;
+STRICT UNIQUENESS & QUALITY RULES:
+1. Every review must sound like a DIFFERENT real person with their own voice and vocabulary.
+2. Randomly vary writing style (Short & simple, Friendly, Professional, Conversational, Detailed, or Emotional).
+3. Randomly vary review length (1–2 sentences, 3–4 sentences, or 5–6 sentences).
+4. Do NOT use cliché template openings like "Had a great experience at B U Bhandari Honda...".
+5. Randomly choose which aspects to highlight and vary the order of points.
+6. If target language is Marathi, write authentic, natural Marathi in Devanagari script. If Hinglish, write natural urban Pune blend. If English, write fluent English.
+7. Only mention employee or team if provided in the input. Never invent fake names.
+8. Output ONLY the plain customer review text. No quotation marks, no markdown, no explanations.`;
 
+    let modelName = 'gemini-3.8-flash';
     const aiPromise = ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: modelName,
       contents: prompt,
       config: {
         systemInstruction:
-          'You write genuine, authentic automotive customer reviews for B.U. Bhandari Honda Camp Showroom. Output ONLY plain review text without markdown or quotes.',
-        temperature: 0.7,
+          'You write authentic, non-repetitive customer reviews for B.U. Bhandari Honda. Return ONLY plain review text without markdown or quotes.',
+        temperature: 0.95,
       },
     });
 
     const result = await Promise.race([aiPromise, timeoutPromise]);
 
     if ('isTimeout' in result) {
-      console.warn('[Gemini] Request timed out after 5s limit, falling back to local review.');
+      console.warn('[Gemini] Request timed out after limit, falling back to current review.');
       return res.status(200).json({
         review: currentReview,
         isFallback: true,

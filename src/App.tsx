@@ -19,10 +19,11 @@ export default function App() {
     selectedAspects: [],
     vehicleModel: '',
     additionalComments: '',
+    language: 'Auto',
   });
 
   const [reviewText, setReviewText] = useState<string>('');
-  const [variationIndex, setVariationIndex] = useState<number>(0);
+  const [reviewHistory, setReviewHistory] = useState<string[]>([]);
   const [currentLogEntryId, setCurrentLogEntryId] = useState<string | null>(null);
   const [sheetSyncStatus, setSheetSyncStatus] = useState<'synced' | 'failed' | 'pending' | 'idle'>('idle');
   const [sheetSyncMessage, setSheetSyncMessage] = useState<string>('');
@@ -39,9 +40,13 @@ export default function App() {
     setFormData((prev) => ({ ...prev, ...data }));
   };
 
-  // Instant Review Generation
+  // Instant Unique Review Generation with Duplicate Prevention & Session History
   const handleGenerateReview = () => {
-    const generated = generateLocalReview(formData, variationIndex);
+    const generated = generateLocalReview(formData, {
+      history: reviewHistory,
+      forceLanguage: formData.language,
+    });
+    setReviewHistory((prev) => [...prev, generated]);
     setReviewText(generated);
     setCurrentStep(4);
 
@@ -127,11 +132,13 @@ export default function App() {
       });
   };
 
-  // Rotate local variation instantly
+  // Rotate local variation instantly with duplicate prevention & history
   const handleRegenerateVariation = () => {
-    const nextSeed = (variationIndex + 1) % 20;
-    setVariationIndex(nextSeed);
-    const newVariation = generateLocalReview(formData, nextSeed);
+    const newVariation = generateLocalReview(formData, {
+      history: reviewHistory,
+      forceLanguage: formData.language,
+    });
+    setReviewHistory((prev) => [...prev, newVariation]);
     setReviewText(newVariation);
 
     if (currentLogEntryId) {
@@ -200,9 +207,9 @@ export default function App() {
       selectedAspects: [],
       vehicleModel: '',
       additionalComments: '',
+      language: 'Auto',
     });
     setReviewText('');
-    setVariationIndex(0);
     setCurrentLogEntryId(null);
     setSheetSyncStatus('idle');
     setSheetSyncMessage('');
@@ -258,10 +265,14 @@ export default function App() {
             <Step4ReviewResult
               formData={formData}
               reviewText={reviewText}
+              history={reviewHistory}
               sheetSyncStatus={sheetSyncStatus}
               sheetSyncMessage={sheetSyncMessage}
               onRetrySheetSync={handleRetrySheetSync}
-              onUpdateReview={(text) => setReviewText(text)}
+              onUpdateReview={(text) => {
+                setReviewText(text);
+                setReviewHistory((prev) => [...prev, text]);
+              }}
               onRegenerateVariation={handleRegenerateVariation}
               onEdit={() => setCurrentStep(3)}
               onRestart={handleRestart}

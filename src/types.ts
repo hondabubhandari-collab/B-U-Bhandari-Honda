@@ -2,6 +2,8 @@ export type ExperienceType = 'New Vehicle Purchase' | 'Vehicle Service' | 'Vehic
 
 export type RatingType = '5 Stars (Excellent)' | '4 Stars (Very Good)' | '3 Stars (Good)' | '2 Stars (Average)' | '1 Star (Needs Improvement)';
 
+export type ReviewLanguage = 'Auto' | 'English' | 'Marathi' | 'Hinglish' | 'Simple English';
+
 export interface ReviewFormData {
   experienceType: ExperienceType | null;
   rating: RatingType | null;
@@ -9,6 +11,7 @@ export interface ReviewFormData {
   teamName?: string;
   selectedAspects: string[];
   additionalComments?: string;
+  language?: ReviewLanguage;
 }
 
 // Columns for Review Activity in Google Sheet:

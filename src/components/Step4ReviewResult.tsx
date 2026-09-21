@@ -17,6 +17,7 @@ import {
 interface Step4ReviewResultProps {
   formData: ReviewFormData;
   reviewText: string;
+  history?: string[];
   sheetSyncStatus: 'synced' | 'failed' | 'pending' | 'idle';
   sheetSyncMessage?: string;
   onRetrySheetSync?: () => void;
@@ -31,6 +32,7 @@ interface Step4ReviewResultProps {
 export const Step4ReviewResult: React.FC<Step4ReviewResultProps> = ({
   formData,
   reviewText,
+  history = [],
   sheetSyncStatus,
   sheetSyncMessage,
   onRetrySheetSync,
@@ -117,6 +119,8 @@ export const Step4ReviewResult: React.FC<Step4ReviewResultProps> = ({
           selectedAspects: formData.selectedAspects,
           additionalComments: formData.additionalComments,
           currentReview: reviewText,
+          language: formData.language || 'Auto',
+          history: history,
         }),
         signal: abortController.signal,
       });
